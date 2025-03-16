@@ -13,28 +13,43 @@ path = r'D:\wResearch_Project\company_data'
 # File name
 file_name = 'company_data.csv'
 
-# Function to split the "Rated For" column
 def split_rated_for(text):
+    # Default values
+    highly_rated_text = ''
+    critically_rated_text = ''
+    
+    # Find positions of the two substrings
     highly_rated_start = text.find("Highly Rated For")
     critically_rated_start = text.find("Critically Rated For")
     
-    if highly_rated_start != -1 and critically_rated_start != -1:
-        highly_rated_text = text[highly_rated_start + len("Highly Rated For"):critically_rated_start].strip()
+    # Extract "Highly Rated For"
+    if highly_rated_start != -1:
+        if critically_rated_start != -1:
+            highly_rated_text = text[highly_rated_start + len("Highly Rated For"):critically_rated_start].strip()
+        else:
+            highly_rated_text = text[highly_rated_start + len("Highly Rated For"):].strip()
+    
+    # Extract "Critically Rated For"
+    if critically_rated_start != -1:
         critically_rated_text = text[critically_rated_start + len("Critically Rated For"):].strip()
-    else:
-        highly_rated_text = ''
-        critically_rated_text = ''
     
     return highly_rated_text, critically_rated_text
 
 if os.path.exists(os.path.join(path, file_name)):
-    # If filepath already exists, read the file and set page number value equal to maximum page_number value
+    # If filepath already exists, read the file
     print(f'{os.path.join(path, file_name)} filepath is available')
     df = pd.read_csv(os.path.join(path, file_name))
-    page_no = df['page_no'].max()
+    
+    # Check if 'page_no' column exists
+    if 'page_no' in df.columns:
+        page_no = df['page_no'].max()
+    else:
+        # Default to 1 if 'page_no' column is missing
+        print("'page_no' column is missing in the existing file. Starting from page 1.")
+        page_no = 1
 else:
     if not os.path.exists(path):
-        directory = os.makedirs(path)
+        os.makedirs(path)
     df = pd.DataFrame()
     page_no = 1
 
@@ -78,7 +93,7 @@ for i in range(page_no, 501):
                 rated_for = j.find('div', class_='companyCardWrapper__ratingComparisonWrapper').text.strip()
             except:
                 rated_for = 'missing'
-                print(f'{company_name} is not rated by employees')
+                print(f'{company_name} is not rated by employees') 
 
             list_1 = j.find_all('span', class_='companyCardWrapper__ActionCount')
             reviews = list_1[0].text.strip()
@@ -109,16 +124,22 @@ for i in range(page_no, 501):
                                 'Benefits': benefit,
                                 'page_no': i})
 
-        df = pd.concat([df, temp_df], ignore_index=True)
+        # Ensure the "Rated For" column has valid string data
+        temp_df['Rated For'] = temp_df['Rated For'].fillna('').astype(str)
 
         # Split the "Rated For" column and create new columns
-        df[['Highly Rated For', 'Critically Rated For']] = df['Rated For'].apply(lambda x: pd.Series(split_rated_for(x)))
+        temp_df[['Highly Rated For', 'Critically Rated For']] = temp_df['Rated For'].apply(lambda x: pd.Series(split_rated_for(x)))
 
-        # Remove the "Rated For," "Photos," and "Page number" columns
-        df.drop(columns=['Rated For', 'page_no'], inplace=True)
+        # Drop the "Rated For" and "page_no" columns only from the temporary DataFrame
+        temp_df.drop(columns=['Rated For', 'page_no'], inplace=True)
 
-        file = df.to_csv(os.path.join(path, file_name), index=False)
+        # Concatenate the processed data to the main DataFrame
+        df = pd.concat([df, temp_df], ignore_index=True)
+
+        # Save the data to CSV after processing each page
+        df.to_csv(os.path.join(path, file_name), index=False)
         print(f'page_number {i} is completed')
+
 
         time.sleep(np.random.choice(range(2, 5)))
     else:
